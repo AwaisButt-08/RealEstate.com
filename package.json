@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/AwaisButt-08/RealEstate.com/issues"
   },
-  "homepage": "https://github.com/AwaisButt-08/RealEstate.com#readme"
+  "homepage": "https://github.com/AwaisButt-08/RealEstate.com#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
 }
