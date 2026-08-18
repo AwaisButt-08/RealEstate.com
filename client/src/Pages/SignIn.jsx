@@ -3,6 +3,7 @@ import { Link,useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useDispatch } from "react-redux";
 import {signInStart, signInSuccess, signInFailure} from "./Redux/User/UserSlice.js"
+import { useSelector } from "react-redux";
 
 
 export default function SignIn() {
@@ -20,7 +21,7 @@ export default function SignIn() {
   const handleSubmit = async (e) => {
     e.preventDefault();
       try {
-    dspatch(signInStart());
+    dispatch(signInStart());
 
     const res = await fetch("/api/auth/signin", {
       method: "POST",
