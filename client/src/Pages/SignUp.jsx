@@ -47,7 +47,7 @@ function SignUp() {
   console.log(formData);
 
   return (
-    <div className="p-3 mx-w-lg mx-auto">
+    <div className="p-3 max-w-sm mx-auto">
       <h1 className="text-3xl font-semibold text-center my-9 text-slate-700 ">
         Sign Up
       </h1>
@@ -84,7 +84,7 @@ function SignUp() {
       <div className="flex gap-2 mt-5">
         <p className="text-slate-700">Have an account? </p>
         <Link to="/signin" className="text-blue-700">
-          <span>Sign In</span>
+          <span>Sign Up</span>
         </Link>
       </div>
     </div>
