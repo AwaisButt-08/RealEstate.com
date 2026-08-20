@@ -4,6 +4,7 @@ import SignIn from "./Pages/SignIn";
 import SignUp from "./Pages/SignUp";
 import About from "./Pages/About";
 import Profile from "./Pages/Profile";
+import AuthCallback from "./Pages/AuthCallback";
 import Header from "./Components/Header";
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/about" element={<About />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>
     </BrowserRouter>
   );

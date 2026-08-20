@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useDispatch } from "react-redux";
 import {signInStart, signInSuccess, signInFailure} from "./Redux/User/UserSlice.js"
 import { useSelector } from "react-redux";
+import OAuth from "../Components/OAuth.jsx";
 
 
 export default function SignIn() {
@@ -25,6 +26,7 @@ export default function SignIn() {
 
     const res = await fetch("/api/auth/signin", {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },
@@ -78,6 +80,7 @@ export default function SignIn() {
     >
       {loading ? "Loading..." : "Sign In"}
     </button>
+    <OAuth />
   </form>
 
   <div className="flex gap-2 mt-5 justify-start">

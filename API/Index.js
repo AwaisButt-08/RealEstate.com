@@ -4,6 +4,9 @@ import dotenv from "dotenv";
 import userRoutes from "./Routes/user-routes.js";
 import authRoutes from "./Routes/auth-route.js";
 dotenv.config();
+import cookieParser from "cookie-parser";
+
+
 
 mongoose.connect(process.env.MONGO)
   .then(() => {
@@ -16,6 +19,7 @@ mongoose.connect(process.env.MONGO)
 const app = express();
 
 app.use(express.json());
+app.use(cookieParser());
 
 app.use("/api/user", userRoutes);
 app.use("/api/auth", authRoutes);
