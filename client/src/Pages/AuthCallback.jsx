@@ -1,9 +1,12 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../Components/supabase";
+import { useDispatch } from "react-redux";
+import { signInSuccess } from "./Redux/User/UserSlice.js";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -18,8 +21,16 @@ export default function AuthCallback() {
         }
 
         if (data?.session) {
-          console.log("✅ User signed in:", data.session.user.email);
-          navigate("/");
+          const oauthUser = data.session.user;
+          dispatch(signInSuccess({
+            _id: oauthUser.id,
+            username:
+              oauthUser.user_metadata?.full_name ||
+              oauthUser.email?.split("@")[0] ||
+              "User",
+            email: oauthUser.email || "",
+          }));
+          navigate("/profile");
         } else {
           navigate("/signin");
         }

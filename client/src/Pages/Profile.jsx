@@ -6,6 +6,12 @@ import {
   updateUserStart,
   updateUserFailure,
   updateUserSuccess,
+  deleteUserFailure,
+  deleteUserStart,
+  deleteUserSuccess,
+  signOutUserStart,
+  signOutUserSuccess,
+  signOutUserFailure,
 } from "../Pages/Redux/User/UserSlice.js";
 import { useDispatch } from "react-redux";
 
@@ -83,7 +89,7 @@ function Profile() {
         setFormData((previousData) => ({ ...previousData, profilePicture }));
 
         const response = await fetch(`/api/user/update/${currentUser._id}`, {
-          method: "PUT",
+          method: "POST",
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
@@ -118,7 +124,7 @@ function Profile() {
     try {
       dispatch(updateUserStart());
       const res = await fetch(`/api/user/update/${currentUser._id}`, {
-        method: "PUT",
+        method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -135,6 +141,43 @@ function Profile() {
       setUpdateSuccess(true);
     } catch (error) {
       dispatch(updateUserFailure(error.message));
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    console.log("Current User:", currentUser);
+    try {
+      dispatch(deleteUserStart());
+      const res = await fetch(`/api/user/delete/${currentUser._id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success == false) {
+        dispatch(deleteUserFailure(data.message));
+        return;
+      }
+      dispatch(deleteUserSuccess(data));
+    } catch(error) {
+      dispatch(deleteUserFailure(error.message));
+    }
+
+  };
+
+  const handleSignOut = async () => {
+    try {
+      dispatch(signOutUserStart());
+      const res = await fetch("/api/auth/signout", {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success === false) {
+        dispatch(signOutUserFailure(data.message));
+        return;
+      }
+      dispatch(signOutUserSuccess());
+    }catch (error) {
+      dispatch(signOutUserFailure(error.message));
     }
   };
 
@@ -174,7 +217,7 @@ function Profile() {
         />
         <input
           className="rounded-xl p-3 border-3 border-slate-700 mb-3 bg-white"
-          type="text"
+          type="password"
           placeholder="Password"
           value={formData.password || ""}
           id="password"
@@ -188,8 +231,8 @@ function Profile() {
         </button>
       </form>
       <div className="flex gap-2 mt-5 justify-between">
-        <span className="text-red-700  cursor-pointer">Delete Account</span>
-        <span className="text-red-700  cursor-pointer">Sign Out</span>
+        <span onClick={handleDeleteUser} className="text-red-700  cursor-pointer">Delete Account</span>
+        <span onClick={handleSignOut} className="text-red-700  cursor-pointer">Sign Out</span>
       </div>
 
       <p className="text-red-700 mt-5">
