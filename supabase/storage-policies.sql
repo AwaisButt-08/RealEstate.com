@@ -19,6 +19,12 @@ using (
   and (storage.foldername(name))[1] = (select auth.uid()::text)
 );
 
+create policy "Anyone can view listing images"
+on storage.objects
+for select
+to public
+using (bucket_id = 'Mern-Estate');
+
 create policy "Users can replace their own profile images"
 on storage.objects
 for update

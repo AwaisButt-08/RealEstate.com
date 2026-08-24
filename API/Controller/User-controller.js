@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import User from "../Models/user-model.js";
 import Listing from "../Models/listing.model.js";
 import { errorHandler } from "../Utils/error.js";
@@ -41,8 +42,19 @@ export const deleteUser = async (req, res, next) => {
   if (req.user.id !== req.params.id)
     return next(errorHandler(403, "You can delete only your account!"));
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      await Listing.deleteMany({ userRef: req.params.id });
+      return res
+        .clearCookie("access_token")
+        .status(200)
+        .json({ message: "User listings have been deleted." });
+    }
+
     await User.findByIdAndDelete(req.params.id);
-    res.status(200).json("User has been deleted.").clearCookie("access_token");
+    res
+      .clearCookie("access_token")
+      .status(200)
+      .json({ message: "User has been deleted." });
   } catch (error) {
     next(error);
   }
@@ -71,14 +83,11 @@ export const getUser = async (req, res, next) => {
 };
 
 export const getUserListings = async (req, res, next) => {
-  if (req.user.id === req.params.id) {
-    try {
-      const listings = await Listing.find({ userRef: req.params.id });
-      res.status(200).json(listings);
-    } catch (error) {
-      next(error);
-    }
-  } else {
-    return next(errorHandler(401, 'You can only view your own listings!'));
+  try {
+    const userId = req.params.id || req.user.id;
+    const listings = await Listing.find({ userRef: userId });
+    res.status(200).json(listings);
+  } catch (error) {
+    next(error);
   }
 };

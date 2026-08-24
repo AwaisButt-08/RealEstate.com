@@ -1,5 +1,5 @@
-import {supabase} from "./supabase.js";
-import {signInSuccess} from "../Pages/Redux/User/UserSlice.js"
+import { supabase } from "./supabase.js";
+import { signInSuccess } from "../Pages/Redux/User/UserSlice.js";
 
 export default function OAuth() {
   async function handleGoogleSubmit() {

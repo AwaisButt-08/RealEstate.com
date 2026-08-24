@@ -1,5 +1,5 @@
 import React from "react";
-import { Link,useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import OAuth from "../Components/OAuth.jsx";
 function SignUp() {
@@ -16,34 +16,34 @@ function SignUp() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-      try {
-    setLoading(true);
-    setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-    const res = await fetch("/api/auth/signup", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(formData),
-    });
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (data.success === false) {
+      if (data.success === false) {
+        setLoading(false);
+        setError(data.message);
+        return;
+      }
       setLoading(false);
-      setError(data.message);
-      return;
+      console.log(data);
+      navigate("/signin");
+    } catch (err) {
+      setLoading(false);
+      setError(err.message);
+      console.error(err);
     }
-    setLoading(false);
-    console.log(data);
-    navigate("/signin");
-  } catch (err) {
-    setLoading(false);
-    setError(err.message);
-    console.error(err);
-  }
-};
+  };
 
   console.log(formData);
 
@@ -86,8 +86,7 @@ function SignUp() {
       <div className="flex gap-2 mt-5">
         <p className="text-slate-700">Have an account? </p>
         <Link to="/signin" className="text-blue-700">
-          <span>Sign In
-          </span>
+          <span>Sign In</span>
         </Link>
       </div>
     </div>

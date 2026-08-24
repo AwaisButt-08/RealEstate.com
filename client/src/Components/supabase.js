@@ -20,7 +20,4 @@ if (supabaseUrl && supabaseKey) {
   console.log("✅ Supabase environment variables loaded successfully!");
 }
 
-export const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
-);
+export const supabase = createClient(supabaseUrl, supabaseKey);

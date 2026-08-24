@@ -8,10 +8,9 @@ import AuthCallback from "./Pages/AuthCallback";
 import Header from "./Components/Header";
 import PrivateRoute from "./Components/PrivateRoute";
 import CreateListing from "./Pages/CreateListing.jsx";
-import UpdateListing from "./Pages/UpdateListing.jsx"
-import Listing from "./Pages/Listing.jsx"
-import Search from "./Pages/Search.jsx"
-
+import UpdateListing from "./Pages/UpdateListing.jsx";
+import Listing from "./Pages/Listing.jsx";
+import Search from "./Pages/Search.jsx";
 
 function App() {
   return (
@@ -22,13 +21,16 @@ function App() {
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/about" element={<About />} />
-        <Route path='/search' element={<Search />} />
-        <Route path='/listing/:listingId' element={<Listing />} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/listing/:listingId" element={<Listing />} />
         <Route element={<PrivateRoute />}>
           <Route element={<PrivateRoute />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/create-listing" element={<CreateListing />} />
-          <Route path="/update-listing/:listingId" element={<UpdateListing />}/>
+          <Route
+            path="/update-listing/:listingId"
+            element={<UpdateListing />}
+          />
         </Route>
         <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>

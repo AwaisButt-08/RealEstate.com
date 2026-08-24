@@ -29,56 +29,95 @@ export default function CreateListing() {
   const [loading, setLoading] = useState(false);
 
   const handleImageSubmit = (e) => {
-    setUploading(true);
-    setImageUploadError(false);
-    if (files.length > 0 && files.length + formData.imageUrls.length < 7) {
-      setUploading(true);
-      setImageUploadError(false);
-      const promises = [];
+  if (files.length === 0) {
+    setImageUploadError("Please select at least one image");
+    return;
+  }
 
-      for (let i = 0; i < files.length; i++) {
-        promises.push(storeImage(files[i]));
-      }
-      Promise.all(promises)
-        .then((urls) => {
-          setFormData({
-            ...formData,
-            imageUrls: formData.imageUrls.concat(urls),
-          });
-          setImageUploadError(false);
-          setUploading(false);
-        })
-        .catch((err) => {
-          setImageUploadError("Image upload failed (2 mb max per image)");
-          setUploading(false);
-        });
-    } else {
-      setImageUploadError("You can only upload 6 images per listing");
+  if (files.length + formData.imageUrls.length > 6) {
+    setImageUploadError("You can only upload 6 images per listing");
+    return;
+  }
+
+  setUploading(true);
+  setImageUploadError(false);
+
+  const promises = [];
+  for (let i = 0; i < files.length; i++) {
+    promises.push(storeImage(files[i]));
+  }
+
+  Promise.all(promises)
+    .then((urls) => {
+      setFormData((prev) => ({
+        ...prev,
+        imageUrls: prev.imageUrls.concat(urls),
+      }));
+      setImageUploadError(false);
+    })
+    .catch((err) => {
+      console.error("handleImageSubmit error:", err.message || err);
+      setImageUploadError(
+        err.message || "Image upload failed (2 mb max per image)"
+      );
+    })
+    .finally(() => {
       setUploading(false);
-    }
-  };
+    });
+};
 
   const storeImage = async (file) => {
-    try {
-      const filename = `${Date.now()}-${file.name}`;
+  try {
+    // Check Supabase authentication
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-      const { data, error } = await supabase.storage
-        .from("Mern-Estate")
-        .upload(filename, file);
-
-      if (error) {
-        throw error;
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("Mern-Estate")
-        .getPublicUrl(filename);
-
-      return publicUrlData.publicUrl;
-    } catch (error) {
-      throw error;
+    if (userError || !user) {
+      throw new Error("You must be signed in to upload images");
     }
-  };
+
+    // Make filename URL-safe
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+
+    // Create unique path
+    const filePath = `${user.id}/${Date.now()}-${cleanFileName}`;
+
+    console.log("Uploading:", filePath);
+
+    // Upload to Supabase — bucket name must match EXACTLY (case-sensitive)
+    const { data, error } = await supabase.storage
+      .from("Mern-Estate")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (error) {
+      console.error("Supabase upload error:", error.message, error);
+      throw new Error(error.message || "Upload failed");
+    }
+
+    console.log("Upload successful:", data);
+
+    // Generate public URL
+    const { data: publicUrlData } = supabase.storage
+      .from("Mern-Estate")
+      .getPublicUrl(data.path);
+
+    if (!publicUrlData?.publicUrl) {
+      throw new Error("Could not generate public image URL");
+    }
+
+    console.log("PUBLIC IMAGE URL:", publicUrlData.publicUrl);
+
+    return publicUrlData.publicUrl;
+  } catch (error) {
+    console.error("storeImage error:", error.message || error);
+    throw error;
+  }
+};
 
   const handleChange = (e) => {
   if (e.target.id === "sale" || e.target.id === "rent") {
@@ -129,10 +168,15 @@ const handleSubmit = async (e) => {
       return setError("Discount price must be lower than regular price");
     setLoading(true);
     setError(false);
+    const { data: sessionData } = await supabase.auth.getSession();
     const res = await fetch("/api/listing/create", {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(sessionData.session?.access_token
+          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+          : {}),
       },
       body: JSON.stringify({
         ...formData,
@@ -153,13 +197,13 @@ const handleSubmit = async (e) => {
 };
 return (
   <main className="p-3 max-w-4xl mx-auto">
-    <h1 className="text-3xl font-semibold my-7 text-center">Create Listing</h1>
+    <h1 className="text-3xl text-slate-700 font-semibold mb-15 mt-10 text-center">Create <span className="text-slate-500">Listing</span></h1>
     <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row">
       <div className="flex flex-col flex-1 gap-4">
         <input
           type="text"
           placeholder="Name"
-          className="border-3 p-3 rounded-xl"
+          className="border-3 text-slate-800 autofill:text-slate-800  placeholder:text-slate-700 border-slate-700 p-3 rounded-xl"
           id="name"
           required
           maxLength="62"
@@ -172,14 +216,14 @@ return (
           placeholder="Description"
           id="description"
           required
-          className="border-3 p-3 rounded-xl "
+          className="border-3 autofill:text-slate-800 text-slate-800 border-slate-700 p-3 rounded-xl "
           onChange={handleChange}
           value={formData.description}
         ></textarea>
         <input
           type="text"
           placeholder="Address"
-          className="border-3 p-3 rounded-xl "
+          className="border-3 autofill:text-slate-800 text-slate-800 placeholder:text-slate-700 border-slate-700 p-3 rounded-xl "
           id="address"
           required
           maxLength="62"
@@ -187,7 +231,7 @@ return (
           onChange={handleChange}
           value={formData.address}
         ></input>
-        <div className="flex flex-wrap gap-4">
+        <div className="flex text-slate-700 flex-wrap gap-4">
           <div className="flex gap-2">
             <input
               type="checkbox"
@@ -198,7 +242,7 @@ return (
             />
             <span>Sale</span>
           </div>
-          <div className="flex gap-2">
+          <div className=" text-slate-700 flex gap-2">
             <input
               type="checkbox"
               id="parking"
@@ -242,7 +286,7 @@ return (
             <span>Offer</span>
           </div>
         </div>
-        <div className=" flex flex-wrap gap-6">
+        <div className=" text-slate-700 flex flex-wrap gap-6">
           <div className="flex flex-col gap-2 ">
             <input
               type="number"
@@ -283,7 +327,6 @@ return (
             <span>Regular Price</span>
             <span className="text-xs">($/Month)</span>
           </div>
-          <p>Offer value: {String(formData.offer)}</p>
           {formData.offer && (
             <div className="flex flex-col  gap-2">
               <input
@@ -322,7 +365,7 @@ return (
             disabled={uploading}
             type="button"
             onClick={handleImageSubmit}
-            className="p-3 mb-5 bg-green-700 rounded-xl text uppercase hover:bg-transparent hover:text-slate-700 hover:border-3 hover:border-green-700  text-center mt-1.5 "
+            className="p-3 mb-5 bg-green-700 rounded-xl text-white uppercase hover:bg-transparent hover:text-slate-700 hover:border-3 hover:border-green-700  text-center mt-1.5 "
           >
             {uploading ? "Uploading..." : "Uploading"}
           </button>
@@ -335,18 +378,18 @@ return (
             return (
               <div
                 key={url}
-                className="flex justify-between p-3 border items-center"
+                className="flex justify-between h-25 text-slate-700 rounded-xl p-3 border-3 border-slate-700 items-center"
               >
                 <img
                   src={url}
                   alt="Listing image"
-                  className="w-40 h-40 rounded-lg object-cover"
+                  className="w-40 h-20 rounded-xl object-cover"
                 />
 
                 <button
                   type="button"
                   onClick={() => handleRemoveImage(index)}
-                  className="bg-red-700 rounded-xl p-3 text-white uppercase"
+                  className="bg-red-700 rounded-xl p-3 text-white uppercase hover:bg-transparent hover:text-red-700 hover:border-3 hover:border-red-700"
                 >
                   Delete
                 </button>

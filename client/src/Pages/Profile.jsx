@@ -29,9 +29,13 @@ function Profile() {
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [showListingsError, setShowListingsError] = useState(false);
   const [userListings, setUserListings] = useState([]);
+  const [hasShownListings, setHasShownListings] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
+      setUserListings([]);
+      setShowListingsError(false);
+      setHasShownListings(false);
       setFormData({
         username: currentUser.username || "",
         email: currentUser.email || "",
@@ -58,67 +62,112 @@ function Profile() {
   }, [file]);
 
   const handleFileUpload = async (file) => {
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+  try {
+    if (!file) {
+      console.error("No file selected");
+      return;
+    }
 
-      if (userError || !user) {
-        console.error("User is not authenticated");
-        return;
-      }
+    // Get currently authenticated Supabase user
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-      console.log("Authenticated user:", user.id);
+    if (userError || !user) {
+      console.error("User is not authenticated:", userError?.message);
+      return;
+    }
 
-      const fileName = `${user.id}/${Date.now()}-${file.name}`;
+    console.log("Authenticated Supabase user:", user.id);
 
-      const { data, error } = await supabase.storage
-        .from("Mern-Estate")
-        .upload(fileName, file);
+    // Create unique file path
+    const fileName = `${user.id}/${Date.now()}-${file.name}`;
 
-      if (error) {
-        console.error("Upload error:", error.message);
-        return;
-      }
+    // Upload image
+    const { data, error } = await supabase.storage
+      .from("Mern-Estate")
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
 
-      const { data: publicUrlData } = supabase.storage
-        .from("Mern-Estate")
-        .getPublicUrl(fileName);
-      const profilePicture = publicUrlData.publicUrl;
+    if (error) {
+      console.error("Upload error:", error.message);
+      return;
+    }
 
-      setImage(profilePicture);
-      setFormData((previousData) => ({ ...previousData, profilePicture }));
+    console.log("File uploaded:", data);
 
-      const response = await fetch(`/api/user/update/${currentUser._id}`, {
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from("Mern-Estate")
+      .getPublicUrl(fileName);
+
+    if (!publicUrlData?.publicUrl) {
+      console.error("Could not generate public URL");
+      return;
+    }
+
+    const profilePicture = publicUrlData.publicUrl;
+
+    console.log("Public image URL:", profilePicture);
+
+    // Update React state
+    setImage(profilePicture);
+
+    setFormData((previousData) => ({
+      ...previousData,
+      profilePicture,
+    }));
+
+    // Make sure currentUser exists
+    if (!currentUser?._id) {
+      console.error("currentUser._id is missing");
+      return;
+    }
+
+    // Update MongoDB
+    const response = await fetch(
+      `/api/user/update/${currentUser._id}`,
+      {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ profilePicture }),
-      });
-      const updatedUser = await response.json();
-
-      if (!response.ok || updatedUser.success === false) {
-        console.error("Profile image update failed:", updatedUser.message);
-        return;
+        body: JSON.stringify({
+          profilePicture,
+        }),
       }
+    );
 
-      dispatch(updateUserSuccess(updatedUser));
-      console.log("Image uploaded successfully:", data);
-    } catch (error) {
-      console.error("Upload failed:", error.message);
+    const updatedUser = await response.json();
+
+    if (!response.ok || updatedUser.success === false) {
+      console.error(
+        "Profile image update failed:",
+        updatedUser.message
+      );
+      return;
     }
-  };
 
-  const handleChange = (e) => {
+    // Update Redux
+    dispatch(updateUserSuccess(updatedUser));
+
+    console.log("Profile image uploaded successfully!");
+  } catch (error) {
+    console.error("Upload failed:", error.message);
+  }
+};
+
+  function handleChange(e) {
     setFormData({
       ...formData,
       [e.target.id]: e.target.value,
     });
     console.log(formData);
-  };
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -149,9 +198,13 @@ function Profile() {
     console.log("Current User:", currentUser);
     try {
       dispatch(deleteUserStart());
+      const { data: sessionData } = await supabase.auth.getSession();
       const res = await fetch(`/api/user/delete/${currentUser._id}`, {
         method: "DELETE",
         credentials: "include",
+        headers: sessionData.session?.access_token
+          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+          : undefined,
       });
       const data = await res.json();
       if (data.success == false) {
@@ -188,36 +241,60 @@ function Profile() {
         return;
       }
       setShowListingsError(false);
-      setShowListingsError(false);
-      const res = await fetch(`/api/user/listing/${currentUser._id}`);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const headers = sessionData.session?.access_token
+        ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+        : undefined;
+      const res = await fetch("/api/user/listing/me", {
+        credentials: "include",
+        headers,
+      });
       const data = await res.json();
-      if (!res.ok || data.success === false || !Array.isArray(data)) {
-        setShowListingsError(true);
+      if (!res.ok || data.success === false) {
+        setShowListingsError(
+          res.status === 401
+            ? "Your session is not authorized. Sign in with email and password to view listings."
+            : data.message || "Unable to load listings",
+        );
         return;
       }
 
-      setUserListings(data);
+      const listings = Array.isArray(data) ? data : data.listings;
+      if (!Array.isArray(listings)) {
+        setShowListingsError("Invalid listings response");
+        return;
+      }
+
+      setShowListingsError(false);
+      setUserListings(listings);
+      setHasShownListings(true);
     } catch (error) {
-      setShowListingsError(true);
+      setShowListingsError(error.message || "Unable to load listings");
     }
   };
 
   const handleListingDelete = async (listingId) => {
     try {
-      const res = await fetch(`/api/listing/delete/${listingId}`,{
-        method: 'DELETE',
+      const { data: sessionData } = await supabase.auth.getSession();
+      const res = await fetch(`/api/listing/delete/${listingId}`, {
+        method: "DELETE",
         credentials: "include",
+        headers: sessionData.session?.access_token
+          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+          : undefined,
       });
       const data = await res.json();
       if (!res.ok || data.success === false) {
         setShowListingsError(true);
         return;
       }
-      setUserListings((prev)=>prev.filter((listing)=> listing._id !== listingId))
+      setUserListings((prev) =>
+        prev.filter((listing) => listing._id !== listingId),
+      );
     } catch (error) {
-      console.log(error.message)
+      console.log(error.message);
     }
-  }
+  };
 
   return (
     <div className="p-3 max-w-lg mx-auto">
@@ -232,7 +309,7 @@ function Profile() {
         />
         <img
           onClick={() => fileRef.current.click()}
-          src={image || "https://via.placeholder.com/150"}
+          src={image}
           alt="profile"
           className="rounded-full h-24 w-24 object-cover cursor-pointer self-center mt-2 mb-2"
         />
@@ -297,47 +374,57 @@ function Profile() {
       >
         Show Listing
       </button>
-      <p>{showListingsError ? "Error Showing Listings" : ""}</p>
+      <p className="text-red-700">
+        {showListingsError ? showListingsError : ""}
+      </p>
 
-      {userListings &&
-        userListings.length > 0 &&
-        <div className="flex flex-col gap-4">
-          <h1 className="text-center font-semibold mt-7 text-2xl">Your Listings</h1>
-        {userListings.map((listing) => (
-          <div
-            key={listing._id}
-            className=" border rounded-xl p-3 flex justify-between items-center gap-4"
-          >
-            <Link to={`/listing/${listing._id}`}>
-              <img
-                src={listing.imageUrls[0]}
-                alt="listing cover"
-                className="h-16 w-16 object-contain rounded-xl"
-              />
-            </Link>
-
-            <Link
-              className="text-slate-700 font-semibold  hover:underline truncate flex-1"
-              to={`/update-listing/${listing._id}`}
+      {userListings && userListings.length > 0 && (
+        <div className=" mt-4 flex flex-col gap-4">
+          <h1 className="text-center text-slate-700 font-semibold mt-7 mb-3 text-4xl">
+            Your  <span className="text-slate-500">Listings</span>
+          </h1>
+          {userListings.map((listing) => (
+            <div
+              key={listing._id}
+              className=" border-2 border-slate-700 rounded-xl p-3 flex justify-between items-center gap-4"
             >
-              <p>{listing.name}</p>
-            </Link>
-
-            <div className="flex flex-col items-center">
-              <button onClick={()=> handleListingDelete(listing._id)} className="text-red-700 uppercase">Delete</button>
-              <Link to={`/update-listing/${listing._id}`}>
-              <button className="text-green-700 uppercase">Edit</button>
+              <Link to={`/listing/${listing._id}`}>
+                <img
+                  src={listing.imageUrls[0]}
+                  alt="listing cover"
+                  className="h-16 w-16 object-contain rounded-xl"
+                />
               </Link>
-              
+
+              <Link
+                className="text-slate-700 font-semibold  hover:underline truncate flex-1"
+                to={`/update-listing/${listing._id}`}
+              >
+                <p>{listing.name}</p>
+              </Link>
+
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={() => handleListingDelete(listing._id)}
+                  className="text-red-700 uppercase"
+                >
+                  Delete
+                </button>
+                <Link to={`/update-listing/${listing._id}`}>
+                  <button className="text-green-700 uppercase">Edit</button>
+                </Link>
+              </div>
             </div>
-
-
-          </div>
-        ))}
-        </div>}
+          ))}
+        </div>
+      )}
+      {hasShownListings && userListings.length === 0 && !showListingsError && (
+        <p className="mt-5 text-center text-slate-600">
+          No listings found for this account.
+        </p>
+      )}
     </div>
   );
 }
 
 export default Profile;
- 
