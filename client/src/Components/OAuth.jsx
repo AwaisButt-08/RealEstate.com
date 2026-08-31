@@ -1,34 +1,81 @@
-import { supabase } from "./supabase.js";
-import { signInSuccess } from "../Pages/Redux/User/UserSlice.js";
+// // import { supabase } from "./supabase.js";
+// import { signInSuccess } from "../Pages/Redux/User/UserSlice.js";
+// // 
+
+
+// // import React from "react";
+// // import { supabase } from "./supabase";
+
+// export default function OAuth() {
+//   const handleGoogleClick = async () => {
+//     const { data, error } = await supabase.auth.signInWithOAuth({
+//       provider: "google",
+//       options: {
+//         redirectTo: "http://localhost:5173/",
+//       },
+//     });
+
+//     if (error) {
+//       console.error("Google OAuth Error:", error.message);
+//     }
+//   };
+
+//   return (
+//     <button
+//       type="button"
+//       onClick={handleGoogleClick}
+//       className="w-full rounded-lg bg-red-500 p-3 text-white"
+//     >
+//       Continue with Google
+//     </button>
+//   );
+// }
+
+// FIREBASE POPUP METHOD
+
+import { GoogleAuthProvider, getAuth, signInWithPopup , signInWithRedirect } from 'firebase/auth';
+import { app } from '../firebase';
+import { useDispatch } from 'react-redux';
+import { signInSuccess } from '../Pages/Redux/User/UserSlice.js';
+import { useNavigate } from 'react-router-dom';
 
 export default function OAuth() {
-  async function handleGoogleSubmit() {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const handleGoogleClick = async () => {
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: import.meta.env.VITE_CALLBACK_URL,
+      const provider = new GoogleAuthProvider();
+      const auth = getAuth(app);
+
+      const result = await signInWithPopup(auth, provider);
+
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          name: result.user.displayName,
+          email: result.user.email,
+          photo: result.user.photoURL,
+        }),
       });
-
-      if (error) {
-        throw error;
-      }
-
-      console.log("✅ Google sign-in started:", data);
+      const data = await res.json();
+      dispatch(signInSuccess(data));
+      navigate('/');
     } catch (error) {
-      console.error("❌ Could not sign in with Google:", error.message);
-      alert("Authentication failed: " + error.message);
+      console.log('could not sign in with google', error);
     }
-  }
-
+  };
   return (
     <button
-      onClick={handleGoogleSubmit}
-      type="button"
-      className="bg-red-700 rounded-xl p-3 text-white uppercase hover:bg-transparent hover:text-red-700 hover:border-3 hover:border-red-700"
+      onClick={handleGoogleClick}
+      type='button'
+      className='bg-red-700 text-white p-3 rounded-lg uppercase hover:border-2 hover:bg-transparent hover:border-red-700 hover:text-red-700'
     >
-      Continue with Google
+      Continue with google
     </button>
   );
 }
+
+

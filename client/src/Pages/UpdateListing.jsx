@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../Components/supabase";
-export default function updateListing() {
+
+export default function UpdateListing() { // Capitalized Component Name
   const [files, setFiles] = useState([]);
   const { user: currentUser } = useSelector((state) => state.user);
   const [formData, setFormData] = useState({
@@ -21,7 +22,6 @@ export default function updateListing() {
     userRef: "",
   });
   const [uploading, setUploading] = useState(false);
-  console.log(formData);
   const navigate = useNavigate();
   const { listingId } = useParams();
 
@@ -42,56 +42,59 @@ export default function updateListing() {
     fetchListing();
   }, [listingId]);
 
-  const handleImageSubmit = (e) => {
+  const handleImageSubmit = () => {
+    if (files.length === 0) {
+      setImageUploadError("Please select at least one image");
+      return;
+    }
+    if (files.length + formData.imageUrls.length > 6) {
+      setImageUploadError("You can only upload 6 images per listing");
+      return;
+    }
+
     setUploading(true);
     setImageUploadError(false);
-    if (files.length > 0 && files.length + formData.imageUrls.length < 7) {
-      setUploading(true);
-      setImageUploadError(false);
-      const promises = [];
 
-      for (let i = 0; i < files.length; i++) {
-        promises.push(storeImage(files[i]));
-      }
-      Promise.all(promises)
-        .then((urls) => {
-          setFormData({
-            ...formData,
-            imageUrls: formData.imageUrls.concat(urls),
-          });
-          setImageUploadError(false);
-          setUploading(false);
-        })
-        .catch((err) => {
-          setImageUploadError("Image upload failed (2 mb max per image)");
-          setUploading(false);
-        });
-    } else {
-      setImageUploadError("You can only upload 6 images per listing");
-      setUploading(false);
+    const promises = [];
+    for (let i = 0; i < files.length; i++) {
+      promises.push(storeImage(files[i]));
     }
+
+    Promise.all(promises)
+      .then((urls) => {
+        setFormData((prev) => ({
+          ...prev,
+          imageUrls: prev.imageUrls.concat(urls),
+        }));
+        setImageUploadError(false);
+      })
+      .catch((err) => {
+        setImageUploadError("Image upload failed (2 mb max per image)");
+      })
+      .finally(() => {
+        setUploading(false);
+      });
   };
 
   const storeImage = async (file) => {
-    try {
-      const filename = `${Date.now()}-${file.name}`;
-
-      const { data, error } = await supabase.storage
-        .from("Mern-Estate")
-        .upload(filename, file);
-
-      if (error) {
-        throw error;
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("Mern-Estate")
-        .getPublicUrl(filename);
-
-      return publicUrlData.publicUrl;
-    } catch (error) {
-      throw error;
+    if (!currentUser?._id) {
+      throw new Error("You must be signed in to upload images");
     }
+
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const filePath = `${currentUser._id}/${Date.now()}-${cleanFileName}`;
+
+    const { data, error } = await supabase.storage
+      .from("Mern-Estate")
+      .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+    if (error) throw error;
+
+    const { data: publicUrlData } = supabase.storage
+      .from("Mern-Estate")
+      .getPublicUrl(data.path);
+
+    return publicUrlData.publicUrl;
   };
 
   const handleChange = (e) => {
@@ -131,6 +134,7 @@ export default function updateListing() {
       imageUrls: formData.imageUrls.filter((_, i) => i !== index),
     });
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -141,10 +145,13 @@ export default function updateListing() {
         return setError("You must upload at least one image");
       if (+formData.regularPrice < +formData.discountedPrice)
         return setError("Discount price must be lower than regular price");
+
       setLoading(true);
       setError(false);
+
       const res = await fetch(`/api/listing/update/${listingId}`, {
         method: "POST",
+        credentials: "include", // Retain session cookie for middleware authentication
         headers: {
           "Content-Type": "application/json",
         },
@@ -153,10 +160,12 @@ export default function updateListing() {
           userRef: currentUser._id,
         }),
       });
+
       const data = await res.json();
       setLoading(false);
+
       if (!res.ok || data.success === false || !data._id) {
-        setError(data.message);
+        setError(data.message || "Failed to update listing");
         return;
       }
       navigate(`/listing/${data._id}`);
@@ -165,12 +174,12 @@ export default function updateListing() {
       setLoading(false);
     }
   };
+
   return (
     <main className="p-3 max-w-4xl mx-auto">
       <h1 className="text-3xl font-semibold my-7 text-center">
-        {" "}
         <span className="text-slate-700">Edit</span>{" "}
-        <span className="text-slate-500">Listing</span>{" "}
+        <span className="text-slate-500">Listing</span>
       </h1>
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row">
         <div className="flex flex-col flex-1 gap-4">
@@ -184,27 +193,26 @@ export default function updateListing() {
             minLength="10"
             onChange={handleChange}
             value={formData.name}
-          ></input>
+          />
           <textarea
-            type="text"
             placeholder="Description"
             id="description"
             required
-            className="border-3 p-3 rounded-xl "
+            className="border-3 p-3 rounded-xl"
             onChange={handleChange}
             value={formData.description}
-          ></textarea>
+          />
           <input
             type="text"
             placeholder="Address"
-            className="border-3 p-3 rounded-xl "
+            className="border-3 p-3 rounded-xl"
             id="address"
             required
             maxLength="62"
             minLength="10"
             onChange={handleChange}
             value={formData.address}
-          ></input>
+          />
           <div className="flex flex-wrap gap-4">
             <div className="flex gap-2">
               <input
@@ -234,7 +242,6 @@ export default function updateListing() {
                 onChange={handleChange}
                 checked={formData.type === "rent"}
               />
-
               <span>Rent</span>
             </div>
             <div className="flex gap-2">
@@ -245,7 +252,6 @@ export default function updateListing() {
                 onChange={handleChange}
                 checked={formData.furnished}
               />
-
               <span>Furnished</span>
             </div>
             <div className="flex gap-2">
@@ -256,12 +262,11 @@ export default function updateListing() {
                 onChange={handleChange}
                 checked={formData.offer}
               />
-
               <span>Offer</span>
             </div>
           </div>
-          <div className=" flex flex-wrap gap-6">
-            <div className="flex flex-col gap-2 ">
+          <div className="flex flex-wrap gap-6">
+            <div className="flex flex-col gap-2">
               <input
                 type="number"
                 id="bedrooms"
@@ -271,10 +276,10 @@ export default function updateListing() {
                 className="p-3 border bg-white border-gray-300 rounded-xl"
                 onChange={handleChange}
                 value={formData.bedrooms}
-              ></input>
+              />
               <span>Beds</span>
             </div>
-            <div className="flex flex-col  gap-2">
+            <div className="flex flex-col gap-2">
               <input
                 type="number"
                 id="bathrooms"
@@ -284,10 +289,10 @@ export default function updateListing() {
                 className="p-3 border bg-white border-gray-300 rounded-xl"
                 onChange={handleChange}
                 value={formData.bathrooms}
-              ></input>
+              />
               <span>Baths</span>
             </div>
-            <div className="flex flex-col  gap-2">
+            <div className="flex flex-col gap-2">
               <input
                 type="number"
                 id="regularPrice"
@@ -297,13 +302,12 @@ export default function updateListing() {
                 className="p-3 border bg-white border-gray-300 rounded-xl"
                 onChange={handleChange}
                 value={formData.regularPrice}
-              ></input>
+              />
               <span>Regular Price</span>
               <span className="text-xs">($/Month)</span>
             </div>
-            <p>Offer value: {String(formData.offer)}</p>
             {formData.offer && (
-              <div className="flex flex-col  gap-2">
+              <div className="flex flex-col gap-2">
                 <input
                   type="number"
                   id="discountedPrice"
@@ -313,7 +317,7 @@ export default function updateListing() {
                   className="p-3 border bg-white border-gray-300 rounded-xl"
                   onChange={handleChange}
                   value={formData.discountedPrice}
-                ></input>
+                />
                 <span>Discounted Price</span>
                 <span className="text-xs">($/Month)</span>
               </div>
@@ -335,12 +339,12 @@ export default function updateListing() {
               type="file"
               accept="image/*"
               multiple
-            ></input>
+            />
             <button
               disabled={uploading}
               type="button"
               onClick={handleImageSubmit}
-              className="p-3 mb-5 text-white bg-green-700 rounded-xl text uppercase hover:bg-transparent hover:text-green-700 hover:border-3 hover:border-green-700  text-center mt-1.5 "
+              className="p-3 mb-5 text-white bg-green-700 rounded-xl uppercase hover:bg-transparent hover:text-green-700 hover:border-3 hover:border-green-700 text-center mt-1.5"
             >
               {uploading ? "Uploading..." : "Uploading"}
             </button>
@@ -349,33 +353,30 @@ export default function updateListing() {
             {imageUploadError && imageUploadError}
           </p>
           {formData.imageUrls.length > 0 &&
-            formData.imageUrls.map((url, index) => {
-              return (
-                <div
-                  key={url}
-                  className="flex justify-between p-3 border items-center"
+            formData.imageUrls.map((url, index) => (
+              <div
+                key={url}
+                className="flex justify-between p-3 border items-center rounded-xl"
+              >
+                <img
+                  src={url}
+                  alt="Listing image"
+                  className="w-40 h-40 rounded-lg object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemoveImage(index)}
+                  className="bg-red-700 rounded-xl p-3 text-white uppercase"
                 >
-                  <img
-                    src={url}
-                    alt="Listing image"
-                    className="w-40 h-40 rounded-lg object-cover"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(index)}
-                    className="bg-red-700 rounded-xl p-3 text-white uppercase"
-                  >
-                    Delete
-                  </button>
-                </div>
-              );
-            })}
+                  Delete
+                </button>
+              </div>
+            ))}
           <button
             disabled={loading || uploading}
             className="bg-slate-700 rounded-xl p-3 text-white uppercase hover:bg-transparent hover:text-slate-700 hover:border-3 hover:border-slate-700"
           >
-            {loading ? "Updating..." : "Create listing"}
+            {loading ? "Updating..." : "Update listing"}
           </button>
           {error && <p className="text-red-700 text-sm">{error}</p>}
         </div>

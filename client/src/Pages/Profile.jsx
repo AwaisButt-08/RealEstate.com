@@ -1,7 +1,7 @@
 import { useSelector } from "react-redux";
+import { supabase } from "../Components/supabase.js"
 import { useRef } from "react";
 import { useState, useEffect } from "react";
-import { supabase } from "../Components/supabase.js";
 import { Link } from "react-router-dom";
 import {
   updateUserStart,
@@ -11,13 +11,13 @@ import {
   deleteUserStart,
   deleteUserSuccess,
   signOutUserStart,
-  signOutUserSuccess,
   signOutUserFailure,
-} from "../Pages/Redux/User/UserSlice.js";
+  signOutUserSuccess,
+} from "./Redux/User/UserSlice.js";
 import { useDispatch } from "react-redux";
 
 function Profile() {
-  const { user: currentUser } = useSelector((state) => state.user);
+  const {currentUser } = useSelector((state) => state.user);
   const Loading = useSelector((state) => state.user.loading);
   const error = useSelector((state) => state.user.error);
   const fileRef = useRef(null);
@@ -61,101 +61,49 @@ function Profile() {
     }
   }, [file]);
 
-  const handleFileUpload = async (file) => {
+const handleFileUpload = async (file) => {
   try {
-    if (!file) {
-      console.error("No file selected");
-      return;
-    }
+    if (!file || !currentUser?._id) return;
 
-    // Get currently authenticated Supabase user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const fileName = `${currentUser._id}/${Date.now()}-${cleanFileName}`;
 
-    if (userError || !user) {
-      console.error("User is not authenticated:", userError?.message);
-      return;
-    }
-
-    console.log("Authenticated Supabase user:", user.id);
-
-    // Create unique file path
-    const fileName = `${user.id}/${Date.now()}-${file.name}`;
-
-    // Upload image
+    // 1. Upload file to Supabase Storage
     const { data, error } = await supabase.storage
       .from("Mern-Estate")
-      .upload(fileName, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+      .upload(fileName, file, { cacheControl: "3600", upsert: true });
 
     if (error) {
       console.error("Upload error:", error.message);
       return;
     }
 
-    console.log("File uploaded:", data);
-
-    // Get public URL
+    // 2. Get Public Image URL
     const { data: publicUrlData } = supabase.storage
       .from("Mern-Estate")
-      .getPublicUrl(fileName);
-
-    if (!publicUrlData?.publicUrl) {
-      console.error("Could not generate public URL");
-      return;
-    }
+      .getPublicUrl(data.path);
 
     const profilePicture = publicUrlData.publicUrl;
 
-    console.log("Public image URL:", profilePicture);
-
-    // Update React state
     setImage(profilePicture);
+    setFormData((prev) => ({ ...prev, profilePicture }));
 
-    setFormData((previousData) => ({
-      ...previousData,
-      profilePicture,
-    }));
-
-    // Make sure currentUser exists
-    if (!currentUser?._id) {
-      console.error("currentUser._id is missing");
-      return;
-    }
-
-    // Update MongoDB
-    const response = await fetch(
-      `/api/user/update/${currentUser._id}`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          profilePicture,
-        }),
-      }
-    );
+    // 3. Update User Profile in MERN Backend via Cookie Auth
+    const response = await fetch(`/api/user/update/${currentUser._id}`, {
+      method: "POST",
+      credentials: "include", // Ensures access_token cookie is transmitted
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ profilePicture }),
+    });
 
     const updatedUser = await response.json();
-
-    if (!response.ok || updatedUser.success === false) {
-      console.error(
-        "Profile image update failed:",
-        updatedUser.message
-      );
-      return;
+    if (response.ok && updatedUser.success !== false) {
+      dispatch(updateUserSuccess(updatedUser));
+    } else {
+      console.error("Profile update error:", updatedUser.message);
     }
-
-    // Update Redux
-    dispatch(updateUserSuccess(updatedUser));
-
-    console.log("Profile image uploaded successfully!");
   } catch (error) {
     console.error("Upload failed:", error.message);
   }
@@ -167,47 +115,42 @@ function Profile() {
       [e.target.id]: e.target.value,
     });
     console.log(formData);
+    
   }
 
-  const handleSubmit = async (e) => {
+   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       dispatch(updateUserStart());
       const res = await fetch(`/api/user/update/${currentUser._id}`, {
-        method: "POST",
+        method: 'POST',
         credentials: "include",
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
       });
       const data = await res.json();
-      console.log(data);
-      if (data.success == false) {
+      if (data.success === false) {
         dispatch(updateUserFailure(data.message));
         return;
       }
+
       dispatch(updateUserSuccess(data));
       setUpdateSuccess(true);
     } catch (error) {
       dispatch(updateUserFailure(error.message));
     }
-  };
-
-  const handleDeleteUser = async () => {
-    console.log("Current User:", currentUser);
+};
+   const handleDeleteUser = async () => {
     try {
       dispatch(deleteUserStart());
-      const { data: sessionData } = await supabase.auth.getSession();
       const res = await fetch(`/api/user/delete/${currentUser._id}`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: sessionData.session?.access_token
-          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
-          : undefined,
+        method: 'DELETE',
+        credentials: 'include',
       });
       const data = await res.json();
-      if (data.success == false) {
+      if (data.success === false) {
         dispatch(deleteUserFailure(data.message));
         return;
       }
@@ -217,79 +160,88 @@ function Profile() {
     }
   };
 
-  const handleSignOut = async () => {
+  const handleSignOut = async ()=>{
     try {
       dispatch(signOutUserStart());
-      const res = await fetch("/api/auth/signout", {
-        credentials: "include",
-      });
+      const res = await fetch(`/api/auth/signout`, {
+      method: 'POST', // 👈 Must be uppercase POST
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
       const data = await res.json();
-      if (data.success === false) {
+      if(data.success=== false){
         dispatch(signOutUserFailure(data.message));
         return;
       }
-      dispatch(signOutUserSuccess());
+      dispatch(signOutUserSuccess(data));
     } catch (error) {
-      dispatch(signOutUserFailure(error.message));
+      dispatch(signOutUserFailure());
     }
-  };
+  }
 
-  const handleShowListing = async () => {
+  // ,{
+  //     method: 'POST', // 👈 Change this from GET to POST
+  //     headers: {
+  //       'Content-Type': 'application/json',
+  //     },}
+// FOR PROFILE LISTINGS
+const handleShowListings = async () => {
     try {
-      if (!currentUser?._id) {
+      setShowListingsError(false);
+      const res = await fetch(`/api/user/listings/${currentUser._id}`, {
+    credentials: "include",
+    });
+      const data = await res.json();
+      if (data.success === false) {
         setShowListingsError(true);
         return;
       }
-      setShowListingsError(false);
-      const { data: sessionData } = await supabase.auth.getSession();
-      const headers = sessionData.session?.access_token
-        ? { Authorization: `Bearer ${sessionData.session.access_token}` }
-        : undefined;
-      const res = await fetch("/api/user/listing/me", {
-        credentials: "include",
-        headers,
-      });
-      const data = await res.json();
-      if (!res.ok || data.success === false) {
-        setShowListingsError(
-          res.status === 401
-            ? "Your session is not authorized. Sign in with email and password to view listings."
-            : data.message || "Unable to load listings",
-        );
-        return;
-      }
 
-      const listings = Array.isArray(data) ? data : data.listings;
-      if (!Array.isArray(listings)) {
-        setShowListingsError("Invalid listings response");
-        return;
-      }
-
-      setShowListingsError(false);
-      setUserListings(listings);
+      setUserListings(data);
       setHasShownListings(true);
     } catch (error) {
-      setShowListingsError(error.message || "Unable to load listings");
+      setShowListingsError(true);
     }
   };
 
-  const handleListingDelete = async (listingId) => {
+// FOR PROFILE LISTINGS
+  // const handleListingDelete = async (listingId) => {
+  //   try {
+  //     const { data: sessionData } = await supabase.auth.getSession();
+  //     const res = await fetch(`/api/listing/delete/${listingId}`, {
+  //       method: "DELETE",
+  //       credentials: "include",
+  //       headers: sessionData.session?.access_token
+  //         ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+  //         : undefined,
+  //     });
+  //     const data = await res.json();
+  //     if (!res.ok || data.success === false) {
+  //       setShowListingsError(true);
+  //       return;
+  //     }
+  //     setUserListings((prev) =>
+  //       prev.filter((listing) => listing._id !== listingId),
+  //     );
+  //   } catch (error) {
+  //     console.log(error.message);
+  //   }
+  // };
+
+   const handleListingDelete = async (listingId) => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
       const res = await fetch(`/api/listing/delete/${listingId}`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: sessionData.session?.access_token
-          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
-          : undefined,
+        method: 'DELETE',
       });
       const data = await res.json();
-      if (!res.ok || data.success === false) {
-        setShowListingsError(true);
+      if (data.success === false) {
+        console.log(data.message);
         return;
       }
+
       setUserListings((prev) =>
-        prev.filter((listing) => listing._id !== listingId),
+        prev.filter((listing) => listing._id !== listingId)
       );
     } catch (error) {
       console.log(error.message);
@@ -317,8 +269,9 @@ function Profile() {
           className="rounded-xl p-3 border-3 border-slate-700 mb-3 bg-white"
           type="text"
           placeholder="Username"
-          value={formData.username || ""}
           id="username"
+          value={formData.username || ""}
+         
           onChange={handleChange}
         />
         <input
@@ -369,11 +322,15 @@ function Profile() {
       </p>
 
       <button
-        onClick={handleShowListing}
+        onClick={handleShowListings}
         className="bg-green-700 rounded-xl p-3 text-white hover:bg-transparent hover:text-green-700 hover:border-3 hover:border-green-700"
       >
         Show Listing
       </button>
+      {/* {showListingsError && (
+        <p className="text-red-700 mt-2">Error loading listings!</p>
+      )} */}
+
       <p className="text-red-700">
         {showListingsError ? showListingsError : ""}
       </p>

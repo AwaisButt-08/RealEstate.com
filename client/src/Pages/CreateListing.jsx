@@ -66,27 +66,17 @@ export default function CreateListing() {
     });
 };
 
-  const storeImage = async (file) => {
+ const storeImage = async (file) => {
   try {
-    // Check Supabase authentication
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    // Use Redux currentUser instead of Supabase Auth
+    if (!currentUser?._id) {
       throw new Error("You must be signed in to upload images");
     }
 
-    // Make filename URL-safe
     const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const filePath = `${currentUser._id}/${Date.now()}-${cleanFileName}`;
 
-    // Create unique path
-    const filePath = `${user.id}/${Date.now()}-${cleanFileName}`;
-
-    console.log("Uploading:", filePath);
-
-    // Upload to Supabase — bucket name must match EXACTLY (case-sensitive)
+    // Upload to Supabase
     const { data, error } = await supabase.storage
       .from("Mern-Estate")
       .upload(filePath, file, {
@@ -94,30 +84,20 @@ export default function CreateListing() {
         upsert: false,
       });
 
-    if (error) {
-      console.error("Supabase upload error:", error.message, error);
-      throw new Error(error.message || "Upload failed");
-    }
+    if (error) throw new Error(error.message);
 
-    console.log("Upload successful:", data);
-
-    // Generate public URL
+    // Get public URL using the uploaded path directly
     const { data: publicUrlData } = supabase.storage
       .from("Mern-Estate")
       .getPublicUrl(data.path);
 
-    if (!publicUrlData?.publicUrl) {
-      throw new Error("Could not generate public image URL");
-    }
-
-    console.log("PUBLIC IMAGE URL:", publicUrlData.publicUrl);
-
     return publicUrlData.publicUrl;
   } catch (error) {
-    console.error("storeImage error:", error.message || error);
+    console.error("storeImage error:", error.message);
     throw error;
   }
 };
+
 
   const handleChange = (e) => {
   if (e.target.id === "sale" || e.target.id === "rent") {
@@ -166,25 +146,25 @@ const handleSubmit = async (e) => {
       return setError("You must upload at least one image");
     if (+formData.regularPrice < +formData.discountedPrice)
       return setError("Discount price must be lower than regular price");
+
     setLoading(true);
     setError(false);
-    const { data: sessionData } = await supabase.auth.getSession();
+
     const res = await fetch("/api/listing/create", {
       method: "POST",
-      credentials: "include",
+      credentials: "include", // Rely on your HTTP-only cookie
       headers: {
         "Content-Type": "application/json",
-        ...(sessionData.session?.access_token
-          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
-          : {}),
       },
       body: JSON.stringify({
         ...formData,
         userRef: currentUser._id,
       }),
     });
+    
     const data = await res.json();
     setLoading(false);
+
     if (!res.ok || data.success === false) {
       setError(data.message);
       return;
@@ -195,6 +175,7 @@ const handleSubmit = async (e) => {
     setLoading(false);
   }
 };
+
 return (
   <main className="p-3 max-w-4xl mx-auto">
     <h1 className="text-3xl text-slate-700 font-semibold mb-15 mt-10 text-center">Create <span className="text-slate-500">Listing</span></h1>

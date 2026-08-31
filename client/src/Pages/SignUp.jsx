@@ -83,6 +83,7 @@ function SignUp() {
         </button>
         <OAuth />
       </form>
+      {error && <p className="text-red-500 mt-3">{error}</p>}
       <div className="flex gap-2 mt-5">
         <p className="text-slate-700">Have an account? </p>
         <Link to="/signin" className="text-blue-700">

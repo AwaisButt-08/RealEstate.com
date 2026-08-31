@@ -1,10 +1,10 @@
-import React from 'react'
+
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Swiper, SwiperSlide } from "swiper/react";
-import SwiperCore from "swiper";
-import { Navigation } from "swiper/modules";
-import "swiper/swiper-bundle.css";
+// import { Swiper, SwiperSlide } from "swiper/react";
+// import SwiperCore from "swiper";
+// import { Navigation } from "swiper/modules";
+// import "swiper/swiper-bundle.css";
 import ListingItem from '../Components/ListingItem';
 import ImageSlider from '../Components/ImageSlider';
 

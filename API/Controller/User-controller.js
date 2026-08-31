@@ -6,32 +6,38 @@ import { errorHandler } from "../Utils/error.js";
 
 
 export function test(req, res) {
-  res.json({
+res.json({
     message: "API route is working!",
   });
 }
 
 export const updateUser = async (req, res, next) => {
-  if (req.user.id !== req.params.id)
+  // 1. Authorization Check
+  if (req.user.id !== req.params.id) {
     return next(errorHandler(403, "You can update only your account!"));
+  }
 
   try {
-    const updateData = {};
+    // Validate Mongo ID
+     if (req.body.password) {
+      req.body.password = bcrypt.hashSync(req.body.password, 10);
+    }
 
-    if (req.body.username) updateData.username = req.body.username;
-    if (req.body.email) updateData.email = req.body.email;
-    if (req.body.password)
-      updateData.password = bcrypt.hashSync(req.body.password, 10);
-    if (req.body.profilePicture)
-      updateData.profilePicture = req.body.profilePicture;
-
-    const updatedUser = await User.findByIdAndUpdate(
+       const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      { $set: updateData },
-      { new: true },
+      {
+        $set: {
+          username: req.body.username,
+          email: req.body.email,
+          password: req.body.password,
+          avatar: req.body.avatar,
+        },
+      },
+      { new: true }
     );
 
     const { password, ...rest } = updatedUser._doc;
+
     res.status(200).json(rest);
   } catch (error) {
     next(error);
@@ -39,36 +45,22 @@ export const updateUser = async (req, res, next) => {
 };
 
 export const deleteUser = async (req, res, next) => {
-  if (req.user.id !== req.params.id)
+  if (String(req.user.id) !== String(req.params.id))
     return next(errorHandler(403, "You can delete only your account!"));
   try {
-    if (!mongoose.isValidObjectId(req.params.id)) {
-      await Listing.deleteMany({ userRef: req.params.id });
-      return res
-        .clearCookie("access_token")
-        .status(200)
-        .json({ message: "User listings have been deleted." });
-    }
+    await User.findByIdAndDelete(req.params.id)
 
-    await User.findByIdAndDelete(req.params.id);
+    
+
     res
       .clearCookie("access_token")
       .status(200)
-      .json({ message: "User has been deleted." });
+      .json({ message: "User have been deleted." });
   } catch (error) {
     next(error);
   }
 };
 
-export const signOut = async (req, res, next) => {
-  try {
-    res.clearCookie("access_token");
-    res.status(200).json({ message: "User signed out successfully." });
-  } catch (error) {
-    next(error);
-  };
-
-};
 
 export const getUser = async (req, res, next) => {
   try {
@@ -82,12 +74,27 @@ export const getUser = async (req, res, next) => {
   }
 };
 
+// export const getUserListings = async (req, res, next) => {
+//   try {
+//     const userId = req.params.id || req.user.id;
+//     const listings = await Listing.find({ userRef: userId });
+//     res.status(200).json(listings);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+// User-controller.js
+
 export const getUserListings = async (req, res, next) => {
-  try {
-    const userId = req.params.id || req.user.id;
-    const listings = await Listing.find({ userRef: userId });
-    res.status(200).json(listings);
-  } catch (error) {
-    next(error);
+  if (String(req.user.id) === String(req.params.id)) {
+    try {
+      const listings = await Listing.find({ userRef: req.params.id });
+      res.status(200).json(listings);
+    } catch (error) {
+      next(error);
+    }
+  } else {
+    return next(errorHandler(401, 'You can only view your own listings!'));
   }
 };
